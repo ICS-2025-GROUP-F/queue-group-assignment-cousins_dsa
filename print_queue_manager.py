@@ -149,3 +149,49 @@ class PrintQueueManager:
                     print(f"      Job {job['job_id']} - {waiting_str}")
 
             print("=" * 60 + "\n")
+
+
+# Test function
+def test_print_queue_manager():
+    """
+    Test the PrintQueueManager with Module 3 integration
+    """
+    print("=== Testing Print Queue Manager with Module 3 Integration ===")
+
+    # Create queue manager with short expiry for testing
+    pq_manager = PrintQueueManager(capacity=5, job_expiry_time=4)  # 4 seconds for testing
+
+    # Add some test jobs
+    pq_manager.enqueue_job("alice", "document1", 1)
+    pq_manager.enqueue_job("bob", "presentation", 2)
+    pq_manager.enqueue_job("charlie", "report", 1)
+
+    # Show initial status
+    pq_manager.show_status()
+
+    # Simulate time passing with real time delays
+    print("Simulating time passage...")
+    for i in range(3):
+        print(f"\n--- Waiting 2 seconds then tick {i + 1} ---")
+        time.sleep(2)  # Wait 2 seconds
+        pq_manager.tick()
+
+        if i == 1:  # Print a job in the middle
+            pq_manager.print_job()
+
+        pq_manager.show_status()
+
+    # Wait for jobs to expire
+    print("\n--- Waiting for remaining jobs to expire ---")
+    time.sleep(3)
+    pq_manager.tick()
+    pq_manager.show_status()
+
+    # Show expiry report
+    expired_jobs = pq_manager.get_expiry_report()
+    print(f"\n Final Expiry Report: {len(expired_jobs)} jobs expired during test")
+
+    print("=== Test Complete ===")
+
+if __name__ == "__main__":
+    test_print_queue_manager()
