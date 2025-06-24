@@ -1,35 +1,36 @@
 import threading
 import time
 from typing import List, Dict, Any
-from job_expiry_module import JobExpiryManager
+
 
 class PrintQueueManager:
-    def __init__(self, capacity=10, aging_interval=5, expiry_time=20, job_expiry_time=300):
+    def __init__(self, capacity=10, aging_interval=5, job_expiry_time=300):
         self.capacity = capacity
         self.queue = []
         self.current_size = 0
         self.lock = threading.Lock()
-        self.current_time = 0
-        self.aging_interval = aging_interval
-        self.expiry_time = expiry_time
-        self.expiry_manager = JobExpiryManager(expiry_time_seconds=job_expiry_time)
 
-        print(f"PrintQueueManager initialized:")
-        print(f"  - Capacity: {capacity}")
-        print(f"  - Aging interval: {aging_interval} ticks")
-        print(f"  - Job expiry time: {job_expiry_time} seconds")
+        # Timing and aging
+        self.aging_interval = aging_interval
+        self.job_expiry_time = job_expiry_time  # Fixed parameter name
+        self.current_time = 0
+
+        # Module 3: Job Expiry tracking
+        self.expired_jobs = []
+        self.total_expired_jobs = 0
+
+        print(f"PrintQueueManager initialized with capacity: {capacity}")
 
     def enqueue_job(self, user_id: str, job_id: str, priority: int = 1) -> bool:
         with self.lock:
             if self.current_size >= self.capacity:
-                print(f"Queue is full! Cannot add job {job_id} for user {user_id}")
+                print(f"Queue is full! Cannot add job {job_id}")
                 return False
 
             job = {
                 'user_id': user_id,
                 'job_id': job_id,
                 'priority': priority,
-                'start_tick': self.current_time,
                 'start_time': time.time(),
                 'waiting_time': 0,
                 'submission_time': self.current_time
@@ -37,115 +38,207 @@ class PrintQueueManager:
 
             self.queue.append(job)
             self.current_size += 1
-
-            print(f"Added job {job_id} for user {user_id} (Priority: {priority})")
+            print(f"Added job {job_id} for user {user_id}")
             return True
 
-    def dequeue_job(self) -> Dict:
+    def print_job(self, job_id: str = None) -> Dict:
+        """Print a job. If job_id is provided, print that specific job. Otherwise, print highest priority job."""
         with self.lock:
             if self.current_size == 0:
-                print("Queue is empty! No jobs to print.")
+                print("Queue is empty!")
                 return None
 
-            self.queue.sort(key=lambda x: (-x['priority'], x['start_time']))
-            job = self.queue.pop(0)
-            self.current_size -= 1
-
-            print(f"Printing job {job['job_id']} for user {job['user_id']}")
-            return job
-
-    def print_job(self, job_id=None):
-        return self.dequeue_job()
-
-    def remove_expired_jobs(self):
-        with self.lock:
-            original_size = len(self.queue)
-            self.queue = self.expiry_manager.remove_expired_jobs(self.queue)
-            self.current_size = len(self.queue)
-            expired_count = original_size - self.current_size
-            if expired_count > 0:
-                print(f"Removed {expired_count} expired jobs. Queue size: {self.current_size}")
-
-    def update_job_waiting_times(self):
-        self.expiry_manager.update_waiting_times(self.queue)
-
-    def get_expiry_report(self) -> List[Dict]:
-        return self.expiry_manager.get_expired_jobs_report()
-
-    def set_job_expiry_time(self, seconds: int):
-        self.expiry_manager.set_expiry_time(seconds)
-
-    def get_jobs_near_expiry(self, threshold_percent=0.8) -> List[Dict]:
-        return self.expiry_manager.get_jobs_near_expiry(self.queue, threshold_percent)
-
-    def get_expiry_statistics(self) -> Dict:
-        stats = self.expiry_manager.get_expiry_statistics()
-        stats['current_queue_size'] = self.current_size
-        stats['queue_capacity'] = self.capacity
-        return stats
+            if job_id:
+                # Find and remove specific job
+                for i, job in enumerate(self.queue):
+                    if job['job_id'] == job_id:
+                        removed_job = self.queue.pop(i)
+                        self.current_size -= 1
+                        print(f"Printing job {job_id} for user {removed_job['user_id']}")
+                        return removed_job
+                print(f"Job {job_id} not found in queue")
+                return None
+            else:
+                # Print highest priority job (existing logic)
+                self.queue.sort(key=lambda x: (-x['priority'], x['start_time']))
+                job = self.queue.pop(0)
+                self.current_size -= 1
+                print(f"Printing job {job['job_id']} for user {job['user_id']}")
+                return job
 
     def apply_priority_aging(self):
-        if self.current_time % self.aging_interval == 0 and self.queue:
+        """Apply priority aging to jobs that have waited long enough"""
+        with self.lock:
             for job in self.queue:
+                # Update waiting time
+                job['waiting_time'] = time.time() - job['start_time']
+
+                # Apply aging if job has waited long enough
                 if job['waiting_time'] > self.aging_interval:
                     job['priority'] += 1
                     print(f"Job {job['job_id']} priority increased to {job['priority']}")
 
-    def handle_simultaneous_submissions(self, jobs: List[Dict]):
-        print(f"Simultaneous submission of {len(jobs)} jobs")
+    def remove_expired_jobs(self):
+        """Remove jobs that have exceeded the expiry time"""
         with self.lock:
-            successful_submissions = 0
-            for job in jobs:
-                if self.enqueue_job(job['user_id'], job['job_id'], job.get('priority', 1)):
-                    successful_submissions += 1
-            print(f"Successfully submitted {successful_submissions}/{len(jobs)} jobs")
+            current_time = time.time()
+            remaining_jobs = []
+
+            for job in self.queue:
+                job['waiting_time'] = current_time - job['start_time']
+
+                if job['waiting_time'] >= self.job_expiry_time:
+                    # Job expired
+                    expired_job = job.copy()
+                    expired_job['expiry_time'] = current_time
+                    expired_job['final_waiting_time'] = job['waiting_time']
+                    self.expired_jobs.append(expired_job)
+                    self.total_expired_jobs += 1
+                    print(f"Job {job['job_id']} expired after {job['waiting_time']:.1f}s")
+                else:
+                    remaining_jobs.append(job)
+
+            self.queue = remaining_jobs
+            self.current_size = len(self.queue)
 
     def send_simultaneous(self, jobs: List[Dict]):
-        self.handle_simultaneous_submissions(jobs)
+        """Handle simultaneous job submissions"""
+        print(f"Processing {len(jobs)} simultaneous submissions")
+
+        successful = 0
+        for job in jobs:
+            if self.enqueue_job(
+                    job.get('user_id', ''),
+                    job.get('job_id', ''),
+                    job.get('priority', 1)
+            ):
+                successful += 1
+
+        print(f"Successfully submitted {successful}/{len(jobs)} jobs")
 
     def tick(self):
+        """Simulate time passing - update waiting times, apply aging, remove expired jobs"""
         with self.lock:
             self.current_time += 1
-            print(f"\nTICK {self.current_time}")
-            self.expiry_manager.advance_tick()
-            self.update_job_waiting_times()
-            self.remove_expired_jobs()
+            print(f"\n== TICK {self.current_time} ==")
+
+            # Update waiting times for all jobs
+            current_time = time.time()
+            for job in self.queue:
+                job['waiting_time'] = current_time - job['start_time']
+
+            # Apply priority aging
             self.apply_priority_aging()
+
+            # Remove expired jobs
+            self.remove_expired_jobs()
+
             print(f"Queue size after tick: {self.current_size}")
 
     def show_status(self):
+        """Display current queue status"""
         with self.lock:
-            self.update_job_waiting_times()
-            print("\n" + "=" * 60)
+            print("\n" + "=" * 50)
             print("PRINT QUEUE STATUS")
-            print("=" * 60)
+            print("=" * 50)
             print(f"Queue Size: {self.current_size}/{self.capacity}")
-            print(f"Current Time: {self.current_time} ticks")
+            print(f"Current Time: {self.current_time}")
 
             if self.queue:
-                print("\nJobs in Queue (sorted by priority):")
+                print("\nJobs in Queue:")
+                # Sort for display (highest priority first, then by start time)
                 sorted_queue = sorted(self.queue, key=lambda x: (-x['priority'], x['start_time']))
+
                 for i, job in enumerate(sorted_queue):
                     waiting_time = job.get('waiting_time', 0)
-                    waiting_str = f"{waiting_time:.1f}s"
-                    print(f"   {i + 1}. User: {job['user_id']:<10} | "
+                    print(f"  {i + 1}. User: {job['user_id']:<10} | "
                           f"Job: {job['job_id']:<10} | "
                           f"Priority: {job['priority']:<3} | "
-                          f"Waiting: {waiting_str}")
+                          f"Waiting: {waiting_time:.1f}s")
             else:
                 print("\nQueue is empty")
 
-            expiry_stats = self.get_expiry_statistics()
-            print(f"\nExpiry Statistics:")
-            print(f"   Total Expired Jobs: {expiry_stats['total_expired_jobs']}")
-            print(f"   Expiry Time: {expiry_stats['current_expiry_time']} seconds")
+            print(f"\nTotal Expired Jobs: {self.total_expired_jobs}")
+            print("=" * 50)
 
-            near_expiry = self.get_jobs_near_expiry()
-            if near_expiry:
-                print(f"\nJobs Near Expiry ({len(near_expiry)}):")
-                for job in near_expiry:
-                    waiting_time = job.get('waiting_time', 0)
-                    waiting_str = f"{waiting_time:.1f}s"
-                    print(f"      Job {job['job_id']} - {waiting_str}")
 
-            print("=" * 60 + "\n")
+
+    def get_expiry_report(self) -> List[Dict]:
+        """Get list of expired jobs for reporting"""
+        return self.expired_jobs.copy()
+
+    def get_jobs_near_expiry(self, threshold_percent: float = 0.8) -> List[Dict]:
+        """Get jobs that are close to expiring"""
+        threshold_time = self.job_expiry_time * threshold_percent
+        near_expiry_jobs = []
+
+        current_time = time.time()
+        for job in self.queue:
+            job['waiting_time'] = current_time - job['start_time']
+            if job['waiting_time'] >= threshold_time:
+                near_expiry_jobs.append(job.copy())
+
+        return near_expiry_jobs
+
+    def get_expiry_statistics(self) -> Dict[str, Any]:
+        """Get statistics about job expiry"""
+        return {
+            'total_expired_jobs': self.total_expired_jobs,
+            'current_expiry_time': self.job_expiry_time,
+            'expired_jobs_this_session': len(self.expired_jobs)
+        }
+
+    def set_job_expiry_time(self, seconds: int) -> None:
+        """Set new job expiry time"""
+        self.job_expiry_time = seconds
+        print(f"Job expiry time updated to {seconds} seconds")
+
+    # ========== UTILITY METHODS ==========
+
+    def get_queue_size(self) -> int:
+        """Get current queue size"""
+        return self.current_size
+
+    def is_full(self) -> bool:
+        """Check if queue is full"""
+        return self.current_size >= self.capacity
+
+    def is_empty(self) -> bool:
+        """Check if queue is empty"""
+        return self.current_size == 0
+
+    def get_expired_jobs(self) -> List[Dict]:
+        """Get list of expired jobs"""
+        return self.expired_jobs.copy()
+
+
+def main():
+    """Main function for testing"""
+    print("== PRINT QUEUE SIMULATION ==")
+
+    # Create print queue manager
+    pq_manager = PrintQueueManager(capacity=5, job_expiry_time=10)
+
+    # Demonstrate all functionality
+    print("\n1. Adding jobs...")
+    pq_manager.enqueue_job("alice", "doc1", 1)
+    pq_manager.enqueue_job("bob", "doc2", 2)
+    pq_manager.enqueue_job("charlie", "doc3", 1)
+
+    print("\n2. Initial status...")
+    pq_manager.show_status()
+
+    print("\n3. Processing tick...")
+    pq_manager.tick()
+
+    print("\n4. Printing a job...")
+    pq_manager.print_job()
+
+    print("\n5. Final status...")
+    pq_manager.show_status()
+
+    print("\n== SIMULATION COMPLETE ==")
+
+
+if __name__ == "__main__":
+    main()

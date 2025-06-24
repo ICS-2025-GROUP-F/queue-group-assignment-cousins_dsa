@@ -79,3 +79,4 @@ class JobExpiryManager:
     def get_time_until_expiry(self, job: Dict[str, Any]) -> float:
         waiting_time = job.get('waiting_time', 0)
         return self.expiry_time_seconds - waiting_time
+
