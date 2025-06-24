@@ -38,6 +38,7 @@ class PrintQueueManager:
         for t in threads:
             t.join()
 
+
     # Module 5: Event Simulation & Time Management
     def tick(self):
         pass  # Simulate time passage and update jobs
