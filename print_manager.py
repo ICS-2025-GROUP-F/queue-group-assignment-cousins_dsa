@@ -29,7 +29,14 @@ class PrintQueueManager:
 
     # Module 4: Concurrent Job Submission Handling
     def handle_simultaneous_submissions(self, jobs):
-        pass  # Handle concurrent submissions safely
+        threads = []
+        for job in jobs:
+            t = threading.Thread(target=self.enqueue_job, args=(job["user_id"], job["job_id"], job["priority"]))
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join()
 
     # Module 5: Event Simulation & Time Management
     def tick(self):
