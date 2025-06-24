@@ -30,7 +30,7 @@ pq_manager.tick()  # This calls your module functions
 pq_manager.show_status()  # Shows expiry information
 
 == FILES CREATED ==
-- job_expiry_module.py: Core module implementation
+- job_expiry: Core module implementation
 - print_queue_manager.py: Integration with main system
 - test_module3.py: Test suite
 - module3_documentation.py: This documentation

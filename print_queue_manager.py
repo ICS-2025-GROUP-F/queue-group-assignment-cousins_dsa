@@ -1,15 +1,30 @@
+"""
+Print Queue Manager - Main Class
+Integration of all modules including Module 3 (Job Expiry & Cleanup)
+"""
+
 import threading
 import time
 from typing import List, Dict, Any
-from job_expiry_module import JobExpiryManager
+from job_expiry import JobExpiryManager
+
 
 class PrintQueueManager:
     """
-     (Job Expiry & Cleanup) functions are integrated here.
+    Main Print Queue Manager class that integrates all modules.
+    Module 3 (Job Expiry & Cleanup) functions are integrated here.
     """
 
     def __init__(self, capacity=10, aging_interval=5, expiry_time=20, job_expiry_time=300):
+        """
+        Initialize the Print Queue Manager
 
+        Args:
+            capacity: Maximum number of jobs in queue
+            aging_interval: Ticks between priority aging (Module 2)
+            expiry_time: Time in ticks after which jobs expire (for tick-based modules)
+            job_expiry_time: Time in seconds after which jobs expire (Module 3)
+        """
         # Core queue properties
         self.capacity = capacity
         self.queue = []  # List to store job dictionaries
@@ -34,10 +49,20 @@ class PrintQueueManager:
     # ========== CORE QUEUE OPERATIONS ==========
 
     def enqueue_job(self, user_id: str, job_id: str, priority: int = 1) -> bool:
+        """
+        Add a job to the queue
 
+        Args:
+            user_id: ID of the user submitting the job
+            job_id: Unique identifier for the job
+            priority: Job priority (higher number = higher priority)
+
+        Returns:
+            True if job was added successfully, False otherwise
+        """
         with self.lock:
             if self.current_size >= self.capacity:
-                print(f" Queue is full! Cannot add job {job_id} for user {user_id}")
+                print(f"❌ Queue is full! Cannot add job {job_id} for user {user_id}")
                 return False
 
             # Create job dictionary
@@ -55,14 +80,19 @@ class PrintQueueManager:
             self.queue.append(job)
             self.current_size += 1
 
-            print(f" Added job {job_id} for user {user_id} (Priority: {priority})")
+            print(f"✅ Added job {job_id} for user {user_id} (Priority: {priority})")
             return True
 
     def dequeue_job(self) -> Dict:
+        """
+        Remove and return the next job to be printed
 
+        Returns:
+            Job dictionary or None if queue is empty
+        """
         with self.lock:
             if self.current_size == 0:
-                print(" Queue is empty! No jobs to print.")
+                print("❌ Queue is empty! No jobs to print.")
                 return None
 
             # Sort by priority first, then by waiting time for tie-breaking
@@ -71,17 +101,22 @@ class PrintQueueManager:
             job = self.queue.pop(0)
             self.current_size -= 1
 
-            print(f"  Printing job {job['job_id']} for user {job['user_id']}")
+            print(f"🖨️  Printing job {job['job_id']} for user {job['user_id']}")
             return job
 
     def print_job(self):
-
+        """
+        Print the next job in the queue (wrapper for dequeue_job)
+        """
         return self.dequeue_job()
 
     # ========== MODULE 3 FUNCTIONS (Job Expiry & Cleanup) ==========
 
     def remove_expired_jobs(self):
-
+        """
+        Remove expired jobs from the queue.
+        This function integrates your Module 3 functionality.
+        """
         with self.lock:
             original_size = len(self.queue)
             self.queue = self.expiry_manager.remove_expired_jobs(self.queue)
@@ -89,12 +124,12 @@ class PrintQueueManager:
 
             expired_count = original_size - self.current_size
             if expired_count > 0:
-                print(f"  Removed {expired_count} expired jobs. Queue size: {self.current_size}")
+                print(f"🗑️  Removed {expired_count} expired jobs. Queue size: {self.current_size}")
 
     def update_job_waiting_times(self):
         """
         Update waiting times for all jobs.
-        This calls Module 3 functionality.
+        This calls your Module 3 functionality.
         """
         self.expiry_manager.update_waiting_times(self.queue)
 
@@ -130,6 +165,7 @@ class PrintQueueManager:
     def apply_priority_aging(self):
         """
         Module 2: Apply priority aging to jobs
+        TODO: To be implemented by Module 2 owner
         """
         # Placeholder - Module 2 will implement this
         if self.current_time % self.aging_interval == 0 and self.queue:
@@ -143,7 +179,7 @@ class PrintQueueManager:
     def handle_simultaneous_submissions(self, jobs: List[Dict]):
         """
         Module 4: Handle concurrent job submissions
-
+        TODO: To be implemented by Module 4 owner
         """
         print(f"[PLACEHOLDER] Simultaneous submission of {len(jobs)} jobs")
 
@@ -162,10 +198,13 @@ class PrintQueueManager:
         self.handle_simultaneous_submissions(jobs)
 
     def tick(self):
-
+        """
+        Module 5: Simulate time passing
+        This calls functions from all modules including Module 3!
+        """
         with self.lock:
             self.current_time += 1
-            print(f"\n TICK {self.current_time}")
+            print(f"\n⏰ TICK {self.current_time}")
 
             # Module 3: Job expiry functions (THESE ARE YOUR FUNCTIONS!)
             self.expiry_manager.advance_tick()  # Advance the expiry manager's time
@@ -178,19 +217,22 @@ class PrintQueueManager:
             print(f"   Queue size after tick: {self.current_size}")
 
     def show_status(self):
-
+        """
+        Module 6: Display current queue status
+        Enhanced to show Module 3 information!
+        """
         with self.lock:
             # Update waiting times before showing status
             self.update_job_waiting_times()
 
             print("\n" + "=" * 60)
-            print("  PRINT QUEUE STATUS")
+            print("🖨️  PRINT QUEUE STATUS")
             print("=" * 60)
-            print(f" Queue Size: {self.current_size}/{self.capacity}")
-            print(f" Current Time: {self.current_time} ticks")
+            print(f"📊 Queue Size: {self.current_size}/{self.capacity}")
+            print(f"⏰ Current Time: {self.current_time} ticks")
 
             if self.queue:
-                print("\n Jobs in Queue (sorted by priority):")
+                print("\n📋 Jobs in Queue (sorted by priority):")
                 # Sort queue for display
                 sorted_queue = sorted(self.queue, key=lambda x: (-x['priority'], x['start_time']))
 
@@ -203,18 +245,18 @@ class PrintQueueManager:
                           f"Priority: {job['priority']:<3} | "
                           f"Waiting: {waiting_str}")
             else:
-                print("\n Queue is empty")
+                print("\n📋 Queue is empty")
 
             # Module 3: Show expiry information
             expiry_stats = self.get_expiry_statistics()
-            print(f"\n  Expiry Statistics:")
+            print(f"\n🗑️  Expiry Statistics:")
             print(f"   Total Expired Jobs: {expiry_stats['total_expired_jobs']}")
             print(f"   Expiry Time: {expiry_stats['current_expiry_time']} seconds")
 
             # Show near expiry jobs
             near_expiry = self.get_jobs_near_expiry()
             if near_expiry:
-                print(f"\n  Jobs Near Expiry ({len(near_expiry)}):")
+                print(f"\n⚠️  Jobs Near Expiry ({len(near_expiry)}):")
                 for job in near_expiry:
                     waiting_time = job.get('waiting_time', 0)
                     waiting_str = f"{waiting_time:.1f}s"
@@ -225,8 +267,10 @@ class PrintQueueManager:
 
 # Test function
 def test_print_queue_manager():
-
-    print("== Testing Print Queue Manager with Module 3 Integration ==")
+    """
+    Test the PrintQueueManager with Module 3 integration
+    """
+    print("=== Testing Print Queue Manager with Module 3 Integration ===")
 
     # Create queue manager with short expiry for testing
     pq_manager = PrintQueueManager(capacity=5, job_expiry_time=4)  # 4 seconds for testing
@@ -259,9 +303,9 @@ def test_print_queue_manager():
 
     # Show expiry report
     expired_jobs = pq_manager.get_expiry_report()
-    print(f"\n Final Expiry Report: {len(expired_jobs)} jobs expired during test")
+    print(f"\n📊 Final Expiry Report: {len(expired_jobs)} jobs expired during test")
 
-    print("== Test Complete ==")
+    print("=== Test Complete ===")
 
 
 if __name__ == "__main__":
