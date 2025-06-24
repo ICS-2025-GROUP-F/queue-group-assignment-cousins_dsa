@@ -12,7 +12,7 @@ class PrintQueueManager:
 
         # Timing and aging
         self.aging_interval = aging_interval
-        self.job_expiry_time = job_expiry_time  # Fixed parameter name
+        self.job_expiry_time = job_expiry_time
         self.current_time = 0
 
         # Module 3: Job Expiry tracking
@@ -22,6 +22,7 @@ class PrintQueueManager:
         print(f"PrintQueueManager initialized with capacity: {capacity}")
 
     def enqueue_job(self, user_id: str, job_id: str, priority: int = 1) -> bool:
+        """Module 1: Core Queue Management"""
         with self.lock:
             if self.current_size >= self.capacity:
                 print(f"Queue is full! Cannot add job {job_id}")
@@ -31,9 +32,10 @@ class PrintQueueManager:
                 'user_id': user_id,
                 'job_id': job_id,
                 'priority': priority,
-                'start_time': time.time(),
+                'start_time': self.current_time,  # Use consistent time
                 'waiting_time': 0,
-                'submission_time': self.current_time
+                'submission_time': self.current_time,
+                'last_aged_time': self.current_time  # Track when last aged
             }
 
             self.queue.append(job)
@@ -42,7 +44,7 @@ class PrintQueueManager:
             return True
 
     def print_job(self, job_id: str = None) -> Dict:
-        """Print a job. If job_id is provided, print that specific job. Otherwise, print highest priority job."""
+        """Module 1: Core Queue Management - Print highest priority job"""
         with self.lock:
             if self.current_size == 0:
                 print("Queue is empty!")
@@ -59,7 +61,7 @@ class PrintQueueManager:
                 print(f"Job {job_id} not found in queue")
                 return None
             else:
-                # Print highest priority job (existing logic)
+                # Print highest priority job
                 self.queue.sort(key=lambda x: (-x['priority'], x['start_time']))
                 job = self.queue.pop(0)
                 self.current_size -= 1
@@ -67,30 +69,32 @@ class PrintQueueManager:
                 return job
 
     def apply_priority_aging(self):
-        """Apply priority aging to jobs that have waited long enough"""
+        """Module 2: Priority & Aging System - FIXED to prevent infinite aging"""
         with self.lock:
             for job in self.queue:
                 # Update waiting time
-                job['waiting_time'] = time.time() - job['start_time']
+                job['waiting_time'] = self.current_time - job['start_time']
 
-                # Apply aging if job has waited long enough
-                if job['waiting_time'] > self.aging_interval:
+                # Only age if enough time has passed since last aging
+                time_since_last_aging = self.current_time - job.get('last_aged_time', job['start_time'])
+
+                if time_since_last_aging >= self.aging_interval:
                     job['priority'] += 1
+                    job['last_aged_time'] = self.current_time
                     print(f"Job {job['job_id']} priority increased to {job['priority']}")
 
     def remove_expired_jobs(self):
-        """Remove jobs that have exceeded the expiry time"""
+        """Module 3: Job Expiry & Cleanup"""
         with self.lock:
-            current_time = time.time()
             remaining_jobs = []
 
             for job in self.queue:
-                job['waiting_time'] = current_time - job['start_time']
+                job['waiting_time'] = self.current_time - job['start_time']
 
                 if job['waiting_time'] >= self.job_expiry_time:
                     # Job expired
                     expired_job = job.copy()
-                    expired_job['expiry_time'] = current_time
+                    expired_job['expiry_time'] = self.current_time
                     expired_job['final_waiting_time'] = job['waiting_time']
                     self.expired_jobs.append(expired_job)
                     self.total_expired_jobs += 1
@@ -102,30 +106,43 @@ class PrintQueueManager:
             self.current_size = len(self.queue)
 
     def send_simultaneous(self, jobs: List[Dict]):
-        """Handle simultaneous job submissions"""
+        """Module 4: Concurrent Job Submission Handling"""
         print(f"Processing {len(jobs)} simultaneous submissions")
 
         successful = 0
-        for job in jobs:
+        threads = []
+
+        def submit_job(job_data):
+            nonlocal successful
             if self.enqueue_job(
-                    job.get('user_id', ''),
-                    job.get('job_id', ''),
-                    job.get('priority', 1)
+                    job_data.get('user_id', ''),
+                    job_data.get('job_id', ''),
+                    job_data.get('priority', 1)
             ):
-                successful += 1
+                with self.lock:
+                    successful += 1
+
+        # Create threads for concurrent submission
+        for job in jobs:
+            thread = threading.Thread(target=submit_job, args=(job,))
+            threads.append(thread)
+            thread.start()
+
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
 
         print(f"Successfully submitted {successful}/{len(jobs)} jobs")
 
     def tick(self):
-        """Simulate time passing - update waiting times, apply aging, remove expired jobs"""
+        """Module 5: Event Simulation & Time Management"""
         with self.lock:
             self.current_time += 1
             print(f"\n== TICK {self.current_time} ==")
 
             # Update waiting times for all jobs
-            current_time = time.time()
             for job in self.queue:
-                job['waiting_time'] = current_time - job['start_time']
+                job['waiting_time'] = self.current_time - job['start_time']
 
             # Apply priority aging
             self.apply_priority_aging()
@@ -136,7 +153,7 @@ class PrintQueueManager:
             print(f"Queue size after tick: {self.current_size}")
 
     def show_status(self):
-        """Display current queue status"""
+        """Module 6: Visualization & Reporting"""
         with self.lock:
             print("\n" + "=" * 50)
             print("PRINT QUEUE STATUS")
@@ -161,7 +178,7 @@ class PrintQueueManager:
             print(f"\nTotal Expired Jobs: {self.total_expired_jobs}")
             print("=" * 50)
 
-
+    # ========== UTILITY METHODS ==========
 
     def get_expiry_report(self) -> List[Dict]:
         """Get list of expired jobs for reporting"""
@@ -172,9 +189,8 @@ class PrintQueueManager:
         threshold_time = self.job_expiry_time * threshold_percent
         near_expiry_jobs = []
 
-        current_time = time.time()
         for job in self.queue:
-            job['waiting_time'] = current_time - job['start_time']
+            job['waiting_time'] = self.current_time - job['start_time']
             if job['waiting_time'] >= threshold_time:
                 near_expiry_jobs.append(job.copy())
 
@@ -192,8 +208,6 @@ class PrintQueueManager:
         """Set new job expiry time"""
         self.job_expiry_time = seconds
         print(f"Job expiry time updated to {seconds} seconds")
-
-    # ========== UTILITY METHODS ==========
 
     def get_queue_size(self) -> int:
         """Get current queue size"""
@@ -230,11 +244,22 @@ def main():
 
     print("\n3. Processing tick...")
     pq_manager.tick()
+    pq_manager.show_status()  # Show status after tick
 
     print("\n4. Printing a job...")
-    pq_manager.print_job()
+    printed_job = pq_manager.print_job()
+    if printed_job:
+        print(f"Successfully printed: {printed_job}")
 
     print("\n5. Final status...")
+    pq_manager.show_status()
+
+    print("\n6. Testing simultaneous submissions...")
+    simultaneous_jobs = [
+        {"user_id": "dave", "job_id": "doc4", "priority": 3},
+        {"user_id": "eve", "job_id": "doc5", "priority": 1}
+    ]
+    pq_manager.send_simultaneous(simultaneous_jobs)
     pq_manager.show_status()
 
     print("\n== SIMULATION COMPLETE ==")
