@@ -52,7 +52,18 @@ class PrintQueueManager:
 
     # Module 5: Event Simulation & Time Management
     def tick(self):
-        pass  # Simulate time passage and update jobs
+        with self.lock:
+            self.current_time += 1
+            print(f"\n[Tick {self.current_time}] Time has progressed.")
+
+            for job in self.queue:
+                job['waiting_time'] += 1
+
+            if self.current_time % self.aging_interval == 0:
+                self.apply_priority_aging()
+
+            self.remove_expired_jobs()
+            self.show_status()
 
     # Module 6: Visualization & Reporting
     def print_queue_snapshot(self):
