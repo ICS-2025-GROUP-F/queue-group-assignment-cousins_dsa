@@ -1,13 +1,12 @@
 import time
 from typing import List, Dict, Any
 
-
 class JobExpiryManager:
     def __init__(self, expiry_time_seconds: int = 300):
         self.expiry_time_seconds = expiry_time_seconds
-        self.expired_jobs = []  # Track expired jobs for reporting
+        self.expired_jobs = []
         self.total_expired_jobs = 0
-        self.start_time = time.time()  # Track when manager started
+        self.start_time = time.time()
 
         print(f"JobExpiryManager initialized with {expiry_time_seconds}s expiry time")
 
@@ -36,7 +35,7 @@ class JobExpiryManager:
                 self.total_expired_jobs += 1
                 self.notify_expiry(job)
 
-                print(f" Job {job['job_id']} by {job['user_id']} expired after {waiting_time:.1f}s")
+                print(f"Job {job['job_id']} by {job['user_id']} expired after {waiting_time:.1f}s")
             else:
                 remaining_jobs.append(job)
 
@@ -67,10 +66,10 @@ class JobExpiryManager:
         print(f"Job expiry time updated to {seconds} seconds")
 
     def advance_tick(self) -> None:
-        pass  # Tick function not required for time-based expiry
+        pass
 
     def notify_expiry(self, job: Dict) -> None:
-        print(f" NOTIFICATION: Job {job['job_id']} for user {job['user_id']} has expired!")
+        print(f"NOTIFICATION: Job {job['job_id']} for user {job['user_id']} has expired!")
 
     def clear_expired_history(self) -> None:
         cleared_count = len(self.expired_jobs)

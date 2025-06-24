@@ -1,7 +1,5 @@
 from print_queue_manager import PrintQueueManager
 import time
-
-
 def test_basic_expiry():
     print("== Testing Basic Job Expiry ==")
     manager = PrintQueueManager(capacity=10, job_expiry_time=3)
