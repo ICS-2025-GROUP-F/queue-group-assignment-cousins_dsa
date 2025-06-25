@@ -3,6 +3,7 @@ import time
 
 class PrintQueueManager:
     def __init__(self, capacity=10, aging_interval=5, expiry_time=20):
+        self.expired_jobs_log = None
         self.capacity = capacity
         self.queue = [None] * capacity
         self.front = 0
@@ -196,8 +197,21 @@ class PrintQueueManager:
 
     # Module 6: Visualization & Reporting
     def print_queue_snapshot(self):
-        pass  # Display current state of queue
+        print(f"\n[Snapshot at time {self.current_time}]")
+        for i, job in enumerate(self.queue):
+            print(f"{i+1}. User: {job['user_id']}, Job: {job['job_id']}, Priority: {job['priority']}, Waiting: {job['waiting_time']}")
 
     # Printing jobs
-    def print_job(self, job_id):
-        pass
+    def print_jobs(self):
+        with self.lock:
+            if self.is_empty():
+                print("No jobs to print - queue is empty")
+                return False
+
+            job = self.dequeue_job()
+            if job:
+                print(f"PRINTING: Job {job['job_id']} from user {job['user_id']} (Priority: {job['priority']}, Waited: {job['waiting_time']}s)")
+                return True
+            else:
+                print("No printable job found")
+                return False
