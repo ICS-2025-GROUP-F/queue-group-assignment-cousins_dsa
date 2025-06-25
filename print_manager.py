@@ -1,8 +1,13 @@
 import threading
+import time
 
 class PrintQueueManager:
     def __init__(self, capacity=10, aging_interval=5, expiry_time=20):
         self.capacity = capacity
+        self.queue = [None] * capacity
+        self.front = 0
+        self.rear = 0
+        self.size = 0
         self.queue = []  # initialize your queue here
         self.lock = threading.Lock()
         self.current_time = 0
@@ -11,13 +16,73 @@ class PrintQueueManager:
 
     # Module 1: Core Queue Management
     def enqueue_job(self, user_id, job_id, priority):
-        pass  # Implement enqueue logic
+        with self.lock:
+            if self.is_full():
+                print(f"Queue is full! Cannot add job {job_id} from user {user_id}")
+                return False
+
+            job = {
+                "user_id": user_id,
+                "job_id": job_id,
+                "priority": priority,
+                "submission_time": self.current_time,
+                "waiting_time": 0,
+                "being_printed": False
+            }
+
+            self.queue[self.rear] = job
+            self.rear = (self.rear + 1) % self.capacity
+            self.size += 1
+            print(f"Job {job_id} from user {user_id} added to queue (Priority: {priority})")
+            return True
 
     def dequeue_job(self):
-        pass  # Implement dequeue logic
+        with self.lock:
+            if self.is_empty():
+                return None
+
+            best_job = None
+            best_index = -1
+
+            current_index = self.front
+            for _ in range(self.size):
+                job = self.queue[current_index]
+                if job is not None and not job["being_printed"]:
+                    if best_job is None or (job["priority"], job["waiting_time"]) < (best_job["priority"], best_job["waiting_time"]):
+                        best_job = job
+                        best_index = current_index
+                current_index = (current_index + 1) % self.capacity
+
+            if best_index != -1:
+                # Remove the job from queue
+                for _ in range((self.rear - best_index) % self.capacity):
+                    next_index = (best_index + 1) % self.capacity
+                    self.queue[best_index] = self.queue[next_index]
+                    best_index = next_index
+                self.rear = (self.rear - 1 + self.capacity) % self.capacity
+                self.queue[self.rear] = None
+                self.size -= 1
+                return best_job
+
+            return None
 
     def show_status(self):
-        pass  # Print current queue state
+        with self.lock:
+            print("\nCurrent Queue Status:")
+            print("====================")
+            index = self.front
+            for _ in range(self.size):
+                job = self.queue[index]
+                if job:
+                    print(f"JobID: {job['job_id']}, UserID: {job['user_id']}, Priority: {job['priority']}, Waiting: {job['waiting_time']}s")
+                index = (index + 1) % self.capacity
+            print("====================\n")
+
+    def is_empty(self):
+        return self.size == 0
+
+    def is_full(self):
+        return self.size == self.capacity
 
     # Module 2: Priority & Aging System
     def apply_priority_aging(self):
@@ -38,7 +103,6 @@ class PrintQueueManager:
     # Module 3: Job Expiry & Cleanup
 
     def remove_expired_jobs(self):
-
         with self.lock:
             expired_jobs = []
             remaining_jobs = []
@@ -66,7 +130,6 @@ class PrintQueueManager:
             return len(expired_jobs)  # Return count of expired jobs
 
     def _notify_expired_jobs(self, expired_jobs):
-
         print(f"\n EXPIRED JOBS ALERT - Time {self.current_time} ")
         for job in expired_jobs:
             print(f"   Job {job['job_id']} from User {job['user_id']} has expired!")
@@ -90,7 +153,6 @@ class PrintQueueManager:
         return report
 
     def update_waiting_times(self):
-
         with self.lock:
             for job in self.queue:
                 if not job['being_printed']:
