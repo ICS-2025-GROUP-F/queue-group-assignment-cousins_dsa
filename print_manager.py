@@ -8,6 +8,7 @@ class PrintQueueManager:
         self.front = 0
         self.rear = 0
         self.size = 0
+        self.queue = []  # initialize your queue here
         self.lock = threading.Lock()
         self.current_time = 0
         self.aging_interval = aging_interval
@@ -83,7 +84,7 @@ class PrintQueueManager:
     def is_full(self):
         return self.size == self.capacity
 
- # Module 2: Priority & Aging System
+    # Module 2: Priority & Aging System
     def apply_priority_aging(self):
         self.time_since_last_aging += 1
         
@@ -102,7 +103,6 @@ class PrintQueueManager:
     # Module 3: Job Expiry & Cleanup
 
     def remove_expired_jobs(self):
-
         with self.lock:
             expired_jobs = []
             remaining_jobs = []
@@ -130,7 +130,6 @@ class PrintQueueManager:
             return len(expired_jobs)  # Return count of expired jobs
 
     def _notify_expired_jobs(self, expired_jobs):
-
         print(f"\n EXPIRED JOBS ALERT - Time {self.current_time} ")
         for job in expired_jobs:
             print(f"   Job {job['job_id']} from User {job['user_id']} has expired!")
@@ -154,7 +153,6 @@ class PrintQueueManager:
         return report
 
     def update_waiting_times(self):
-
         with self.lock:
             for job in self.queue:
                 if not job['being_printed']:
